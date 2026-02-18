@@ -11,7 +11,7 @@ A comprehensive simulation and presales sizing tool for MOTOTRBO DMR radio integ
 
 ---
 
-## Dashboard Preview (Light Mode — Glassmorphism)
+## Dashboard Preview
 
 ![UI Dashboard Preview](docs/ui-dashboard-preview.png)
 
@@ -38,7 +38,7 @@ A comprehensive simulation and presales sizing tool for MOTOTRBO DMR radio integ
 
 ---
 
-## Why Java (Spring Boot)?
+## Java (Spring Boot) Core
 
 | Criteria | Java | Go | Rust | C++ |
 |---|---|---|---|---|
