@@ -144,7 +144,7 @@ SCADA Server ──Modbus TCP──► Data Gateway ──DMR Data──► Fiel
 ### Run
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/mototrbo-scada-simulator
+git clone https://github.com/palmacitra/scada_int-mototrbo
 cd mototrbo-scada-simulator
 mvn spring-boot:run
 ```
@@ -306,8 +306,8 @@ Lu = 69.55 + 26.16·log(f) - 13.82·log(hte) - a(hre) + [44.9 - 6.55·log(hte)]�
 
 ## Disclaimer
 
-This simulator is an **internal presales tool** for sizing and demonstration purposes. RF calculations are estimates based on industry-standard propagation models. Actual site surveys, RF drive tests, and professional RF engineering are required for production deployments. Equipment specifications reference publicly available Motorola Solutions datasheets.
+This simulator is an **presales tool** for sizing and demonstration purposes. RF calculations are estimates based on industry-standard propagation models. Actual site surveys, RF drive tests, and professional RF engineering are required for production deployments. Equipment specifications reference publicly available Motorola Solutions datasheets.
 
 ---
 
-*Built for Motorola Solutions MOTOTRBO Presales Engineers — Indonesia Region*
+*Motorola Solutions MOTOTRBO Presales Engineers — Indonesia Region*
