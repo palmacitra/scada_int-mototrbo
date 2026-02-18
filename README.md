@@ -145,7 +145,7 @@ SCADA Server ──Modbus TCP──► Data Gateway ──DMR Data──► Fiel
 
 ```bash
 git clone https://github.com/palmacitra/scada_int-mototrbo
-cd mototrbo-scada-simulator
+cd scada_int-mototrbo
 mvn spring-boot:run
 ```
 
