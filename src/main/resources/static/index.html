@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOTOTRBO SCADA Integration Simulator</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary:       #1a56db;
+    --primary-light: #3b82f6;
+    --accent:        #f97316;
+    --accent-soft:   #fed7aa;
+    --ok:            #16a34a;
+    --warn:          #d97706;
+    --alarm:         #dc2626;
+    --bg-sky:        #e0f2fe;
+    --bg-cloud:      #f0f9ff;
+    --glass-bg:      rgba(255,255,255,0.65);
+    --glass-border:  rgba(255,255,255,0.85);
+    --glass-shadow:  rgba(30,80,180,0.10);
+    --text-dark:     #0f172a;
+    --text-mid:      #475569;
+    --text-light:    #94a3b8;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'DM Sans', sans-serif;
+    background: linear-gradient(135deg, #dbeafe 0%, #e0f2fe 35%, #f0fdf4 70%, #fff7ed 100%);
+    min-height: 100vh;
+    color: var(--text-dark);
+    overflow-x: hidden;
+  }
+
+  /* Ambient blobs */
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    pointer-events: none;
+    z-index: 0;
+  }
+  body::before {
+    width: 600px; height: 600px;
+    background: rgba(59,130,246,0.15);
+    top: -100px; left: -100px;
+  }
+  body::after {
+    width: 500px; height: 500px;
+    background: rgba(249,115,22,0.10);
+    bottom: -100px; right: -100px;
+  }
+
+  .glass {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    box-shadow: 0 4px 24px var(--glass-shadow), 0 1px 0 rgba(255,255,255,0.9) inset;
+  }
+
+  /* ===== HEADER ===== */
+  .header {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(255,255,255,0.80);
+    backdrop-filter: blur(24px) saturate(1.6);
+    border-bottom: 1px solid rgba(255,255,255,0.7);
+    box-shadow: 0 2px 16px rgba(30,80,180,0.08);
+    padding: 0 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    height: 64px;
+  }
+  .header-brand {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .brand-logo {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: white; font-weight: 700; font-size: 14px;
+    box-shadow: 0 2px 8px rgba(26,86,219,0.3);
+  }
+  .brand-title { font-size: 15px; font-weight: 700; color: var(--primary); letter-spacing: -0.3px; }
+  .brand-sub   { font-size: 11px; color: var(--text-mid); font-weight: 400; }
+  .header-status {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; font-weight: 500; color: var(--ok);
+  }
+  .status-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ok);
+    box-shadow: 0 0 0 3px rgba(22,163,74,0.2);
+    animation: pulse-ok 2s infinite;
+  }
+  @keyframes pulse-ok {
+    0%,100% { box-shadow: 0 0 0 3px rgba(22,163,74,0.2); }
+    50%      { box-shadow: 0 0 0 6px rgba(22,163,74,0.08); }
+  }
+
+  /* ===== NAV TABS ===== */
+  .nav-tabs {
+    display: flex; gap: 4px;
+    background: rgba(255,255,255,0.5);
+    border-radius: 10px; padding: 4px;
+  }
+  .nav-tab {
+    padding: 6px 16px; border-radius: 7px;
+    font-size: 13px; font-weight: 500; cursor: pointer;
+    border: none; background: transparent;
+    color: var(--text-mid); transition: all 0.2s;
+  }
+  .nav-tab.active {
+    background: white;
+    color: var(--primary);
+    box-shadow: 0 1px 8px rgba(30,80,180,0.15);
+  }
+  .nav-tab:hover:not(.active) { color: var(--text-dark); background: rgba(255,255,255,0.6); }
+
+  /* ===== LAYOUT ===== */
+  main {
+    position: relative; z-index: 1;
+    max-width: 1440px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ===== KPI ROW ===== */
+  .kpi-row {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .kpi-card {
+    padding: 16px;
+    text-align: center;
+    transition: transform 0.2s;
+  }
+  .kpi-card:hover { transform: translateY(-2px); }
+  .kpi-value { font-size: 28px; font-weight: 700; line-height: 1; }
+  .kpi-label { font-size: 11px; color: var(--text-mid); margin-top: 4px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .kpi-icon  { font-size: 20px; margin-bottom: 8px; }
+  .kpi-ok    { color: var(--ok); }
+  .kpi-warn  { color: var(--warn); }
+  .kpi-alarm { color: var(--alarm); }
+  .kpi-blue  { color: var(--primary); }
+
+  /* ===== GRID ===== */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 16px;
+  }
+  .col-span-2 { grid-column: span 2; }
+
+  .panel { padding: 20px; }
+  .panel-title {
+    font-size: 13px; font-weight: 700;
+    color: var(--text-mid); text-transform: uppercase;
+    letter-spacing: 0.8px; margin-bottom: 16px;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--primary);
+  }
+
+  /* ===== RADIO LIST ===== */
+  .radio-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 12px; border-radius: 10px;
+    background: rgba(255,255,255,0.5);
+    margin-bottom: 6px;
+    transition: background 0.2s;
+  }
+  .radio-item:hover { background: rgba(255,255,255,0.8); }
+  .radio-avatar {
+    width: 32px; height: 32px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+    background: linear-gradient(135deg, #dbeafe, #bfdbfe);
+  }
+  .radio-info { flex: 1; min-width: 0; }
+  .radio-alias  { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .radio-model  { font-size: 11px; color: var(--text-mid); }
+  .radio-signal { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--text-mid); }
+  .radio-status-badge {
+    font-size: 10px; font-weight: 600; padding: 2px 8px;
+    border-radius: 20px; white-space: nowrap;
+  }
+  .badge-idle         { background: #e0f2fe; color: #0369a1; }
+  .badge-transmitting { background: #fef9c3; color: #854d0e; }
+  .badge-online       { background: #dcfce7; color: #166534; }
+  .badge-offline      { background: #fee2e2; color: #991b1b; }
+  .badge-emergency    { background: #dc2626; color: white; animation: blink 0.8s infinite; }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  /* ===== SCADA NODES ===== */
+  .scada-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .scada-node {
+    padding: 10px 12px; border-radius: 10px;
+    background: rgba(255,255,255,0.5);
+    border-left: 3px solid var(--primary-light);
+    transition: background 0.2s;
+  }
+  .scada-node.alarm  { border-left-color: var(--alarm); background: rgba(254,226,226,0.4); }
+  .scada-node.warning { border-left-color: var(--warn); background: rgba(254,243,199,0.4); }
+  .scada-node-id    { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--text-mid); }
+  .scada-node-name  { font-size: 12px; font-weight: 600; margin: 2px 0; }
+  .scada-node-value { font-size: 16px; font-weight: 700; color: var(--primary); }
+  .scada-node-value.alarm  { color: var(--alarm); }
+  .scada-node-value.warning { color: var(--warn); }
+
+  /* ===== EVENT LOG ===== */
+  .event-log {
+    max-height: 340px; overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148,163,184,0.4) transparent;
+  }
+  .event-item {
+    display: flex; gap: 10px; padding: 8px 10px;
+    border-radius: 8px; margin-bottom: 4px;
+    font-size: 12px;
+    background: rgba(255,255,255,0.4);
+  }
+  .event-time { font-family: 'JetBrains Mono', monospace; color: var(--text-mid); white-space: nowrap; font-size: 11px; }
+  .event-desc { flex: 1; }
+  .event-sev  { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 600; white-space: nowrap; align-self: flex-start; }
+  .sev-INFO     { background: #dbeafe; color: #1e40af; }
+  .sev-WARNING  { background: #fef3c7; color: #92400e; }
+  .sev-ALARM    { background: #fee2e2; color: #991b1b; }
+  .sev-CRITICAL { background: #dc2626; color: white; }
+
+  /* ===== REPEATER CARDS ===== */
+  .repeater-list { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .repeater-card {
+    padding: 14px; border-radius: 12px;
+    background: rgba(255,255,255,0.5);
+  }
+  .repeater-model { font-size: 13px; font-weight: 700; }
+  .repeater-site  { font-size: 11px; color: var(--text-mid); }
+  .repeater-stat-row { display: flex; justify-content: space-between; margin-top: 8px; }
+  .repeater-stat label { font-size: 10px; color: var(--text-mid); text-transform: uppercase; }
+  .repeater-stat value { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; display: block; }
+  .active-led {
+    display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--ok); box-shadow: 0 0 6px rgba(22,163,74,0.5);
+    margin-right: 4px;
+  }
+
+  /* ===== SIZING PAGE ===== */
+  .sizing-layout { display: grid; grid-template-columns: 380px 1fr; gap: 20px; }
+
+  .form-group { margin-bottom: 14px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--text-mid); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  input[type=number], input[type=text], select {
+    width: 100%; padding: 9px 12px;
+    background: rgba(255,255,255,0.7);
+    border: 1px solid rgba(148,163,184,0.3);
+    border-radius: 8px;
+    font-size: 14px; font-family: 'DM Sans', sans-serif;
+    color: var(--text-dark);
+    transition: border 0.2s, box-shadow 0.2s;
+    outline: none;
+  }
+  input:focus, select:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px rgba(26,86,219,0.12);
+  }
+
+  .btn {
+    padding: 11px 24px; border-radius: 10px; border: none; cursor: pointer;
+    font-size: 14px; font-weight: 600; font-family: 'DM Sans', sans-serif;
+    transition: all 0.2s;
+  }
+  .btn-primary {
+    background: linear-gradient(135deg, var(--primary), var(--primary-light));
+    color: white; box-shadow: 0 4px 12px rgba(26,86,219,0.3);
+    width: 100%;
+  }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(26,86,219,0.4); }
+  .btn-primary:active { transform: translateY(0); }
+
+  .result-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-bottom: 16px; }
+  .result-card {
+    padding: 14px; border-radius: 12px;
+    background: rgba(255,255,255,0.5);
+    text-align: center;
+  }
+  .result-card .val { font-size: 24px; font-weight: 700; color: var(--primary); }
+  .result-card .lbl { font-size: 11px; color: var(--text-mid); margin-top: 2px; }
+
+  .site-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .site-table th {
+    text-align: left; padding: 8px 10px;
+    background: rgba(26,86,219,0.06);
+    font-weight: 700; color: var(--text-mid);
+    border-bottom: 1px solid rgba(148,163,184,0.2);
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  .site-table td { padding: 8px 10px; border-bottom: 1px solid rgba(148,163,184,0.1); }
+  .site-table tr:hover td { background: rgba(255,255,255,0.5); }
+
+  .warn-list { list-style: none; }
+  .warn-list li {
+    padding: 8px 12px; border-radius: 8px; margin-bottom: 6px;
+    font-size: 12px;
+  }
+  .warn-list li.warn  { background: rgba(254,243,199,0.7); color: #92400e; border-left: 3px solid var(--warn); }
+  .warn-list li.rec   { background: rgba(220,252,231,0.7); color: #166534; border-left: 3px solid var(--ok); }
+
+  .badge-budget {
+    display: inline-block; padding: 4px 14px; border-radius: 20px;
+    font-size: 13px; font-weight: 700;
+  }
+  .budget-ENTRY      { background: #dcfce7; color: #166534; }
+  .budget-MID        { background: #fef9c3; color: #854d0e; }
+  .budget-ENTERPRISE { background: #dbeafe; color: #1e40af; }
+
+  /* ===== RF CALCULATOR ===== */
+  .rf-result-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .rf-item { padding: 12px 14px; border-radius: 10px; background: rgba(255,255,255,0.5); }
+  .rf-item .rf-lbl { font-size: 10px; color: var(--text-mid); text-transform: uppercase; letter-spacing: 0.5px; }
+  .rf-item .rf-val { font-family: 'JetBrains Mono', monospace; font-size: 18px; font-weight: 700; color: var(--primary); }
+  .rf-item.good .rf-val { color: var(--ok); }
+  .rf-item.bad  .rf-val { color: var(--alarm); }
+
+  /* ===== FOOTER ===== */
+  .footer {
+    text-align: center; padding: 24px;
+    font-size: 11px; color: var(--text-light);
+    position: relative; z-index: 1;
+  }
+
+  /* responsive */
+  @media(max-width: 1100px) {
+    .kpi-row { grid-template-columns: repeat(3,1fr); }
+    .dashboard-grid { grid-template-columns: 1fr 1fr; }
+    .col-span-2 { grid-column: span 2; }
+    .sizing-layout { grid-template-columns: 1fr; }
+  }
+  @media(max-width: 700px) {
+    .kpi-row { grid-template-columns: repeat(2,1fr); }
+    .dashboard-grid { grid-template-columns: 1fr; }
+    .nav-tab { padding: 6px 10px; font-size: 12px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="header">
+  <div class="header-brand">
+    <div class="brand-logo">MS</div>
+    <div>
+      <div class="brand-title">MOTOTRBO SCADA Simulator</div>
+      <div class="brand-sub">Presales Sizing &amp; Integration Tool &mdash; v1.0.0</div>
+    </div>
+  </div>
+  <nav class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('dashboard')">Live Dashboard</button>
+    <button class="nav-tab" onclick="showPage('sizing')">Sizing Engine</button>
+    <button class="nav-tab" onclick="showPage('rf')">RF Calculator</button>
+    <button class="nav-tab" onclick="showPage('integration')">Integration Guide</button>
+  </nav>
+  <div class="header-status">
+    <div class="status-dot" id="wsStatus"></div>
+    <span id="wsLabel">Connecting...</span>
+  </div>
+</header>
+
+<main>
+
+<!-- ===== PAGE: DASHBOARD ===== -->
+<div class="page active" id="page-dashboard">
+
+  <!-- KPI Row -->
+  <div class="kpi-row">
+    <div class="glass kpi-card">
+      <div class="kpi-icon">📡</div>
+      <div class="kpi-value kpi-blue" id="kpi-radios">—</div>
+      <div class="kpi-label">Radios Online</div>
+    </div>
+    <div class="glass kpi-card">
+      <div class="kpi-icon">🔁</div>
+      <div class="kpi-value kpi-blue" id="kpi-repeaters">—</div>
+      <div class="kpi-label">Repeaters Active</div>
+    </div>
+    <div class="glass kpi-card">
+      <div class="kpi-icon">🏭</div>
+      <div class="kpi-value kpi-ok" id="kpi-nodes-ok">—</div>
+      <div class="kpi-label">SCADA Nodes OK</div>
+    </div>
+    <div class="glass kpi-card">
+      <div class="kpi-icon">⚠️</div>
+      <div class="kpi-value kpi-warn" id="kpi-nodes-warn">—</div>
+      <div class="kpi-label">Nodes Warning</div>
+    </div>
+    <div class="glass kpi-card">
+      <div class="kpi-icon">🚨</div>
+      <div class="kpi-value kpi-alarm" id="kpi-nodes-alarm">0</div>
+      <div class="kpi-label">Nodes Alarm</div>
+    </div>
+    <div class="glass kpi-card">
+      <div class="kpi-icon">📋</div>
+      <div class="kpi-value kpi-blue" id="kpi-events">—</div>
+      <div class="kpi-label">Telemetry Events</div>
+    </div>
+  </div>
+
+  <!-- Main Grid -->
+  <div class="dashboard-grid">
+
+    <!-- Radio List -->
+    <div class="glass panel">
+      <div class="panel-title"><span class="panel-title-dot"></span> Radio Devices (HT)</div>
+      <div id="radio-list">Loading...</div>
+    </div>
+
+    <!-- SCADA Nodes -->
+    <div class="glass panel">
+      <div class="panel-title"><span class="panel-title-dot"></span> SCADA Nodes</div>
+      <div class="scada-grid" id="scada-grid">Loading...</div>
+    </div>
+
+    <!-- Repeater Status -->
+    <div class="glass panel">
+      <div class="panel-title"><span class="panel-title-dot"></span> Repeater Infrastructure</div>
+      <div class="repeater-list" id="repeater-list">Loading...</div>
+    </div>
+
+    <!-- Event Log spans 2 -->
+    <div class="glass panel col-span-2">
+      <div class="panel-title"><span class="panel-title-dot"></span> Live Telemetry Event Log
+        <span style="margin-left:auto;font-size:10px;font-weight:400;color:var(--text-light)">DMR TS2 Data Channel</span>
+      </div>
+      <div class="event-log" id="event-log">Waiting for telemetry...</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== PAGE: SIZING ===== -->
+<div class="page" id="page-sizing">
+  <div class="sizing-layout">
+
+    <!-- Form -->
+    <div class="glass panel">
+      <div class="panel-title"><span class="panel-title-dot"></span> Sizing Parameters</div>
+
+      <div class="form-group">
+        <label>Total Area (Hectares)</label>
+        <input type="number" id="s-area" value="2000" min="10" max="50000">
+      </div>
+      <div class="form-group">
+        <label>Number of Sites / Plants</label>
+        <input type="number" id="s-sites" value="4" min="1" max="50">
+      </div>
+      <div class="form-group">
+        <label>Total Users (Radio Users)</label>
+        <input type="number" id="s-users" value="150" min="5" max="5000">
+      </div>
+      <div class="form-group">
+        <label>Number of Radios (HT)</label>
+        <input type="number" id="s-radios" value="150" min="5" max="5000">
+      </div>
+      <div class="form-group">
+        <label>Number of SCADA Nodes</label>
+        <input type="number" id="s-scada" value="24" min="0" max="500">
+      </div>
+      <div class="form-group">
+        <label>Antenna Tower Height (m)</label>
+        <input type="number" id="s-tower" value="25" min="5" max="150">
+      </div>
+      <div class="form-group">
+        <label>Radio Model</label>
+        <select id="s-radio-model">
+          <option value="XPR7550e">XPR7550e (Flagship, GPS+Telemetry)</option>
+          <option value="XPR7350e">XPR7350e (No GPS Display)</option>
+          <option value="DP4801e">DP4801e (Rugged, IP68)</option>
+          <option value="DP4601e">DP4601e (Standard Rugged)</option>
+          <option value="R7">R7 (Latest Gen, Wi-Fi)</option>
+          <option value="SL3500e">SL3500e (Slim/Covert)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Repeater Model</label>
+        <select id="s-repeater-model">
+          <option value="SLR8000">SLR8000 (100W, Enterprise)</option>
+          <option value="SLR5000">SLR5000 (50W, Standard)</option>
+          <option value="SLR1000">SLR1000 (10W, Micro)</option>
+          <option value="MTR3000">MTR3000 (100W, Legacy)</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Environment</label>
+        <select id="s-env">
+          <option value="false">Industrial Outdoor (Default FMCG)</option>
+          <option value="true">Industrial Indoor (Heavy Building Penetration)</option>
+        </select>
+      </div>
+
+      <button class="btn btn-primary" onclick="runSizing()">Calculate Sizing</button>
+    </div>
+
+    <!-- Results -->
+    <div id="sizing-results" style="display:none">
+      <div class="glass panel" style="margin-bottom:16px">
+        <div class="panel-title"><span class="panel-title-dot"></span> System Recommendation</div>
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+          <div>
+            <div style="font-size:11px;color:var(--text-mid);text-transform:uppercase;letter-spacing:0.5px">Recommended System</div>
+            <div style="font-size:20px;font-weight:700;color:var(--primary)" id="r-systemtype">—</div>
+          </div>
+          <div style="margin-left:auto">
+            <div style="font-size:11px;color:var(--text-mid);text-transform:uppercase;letter-spacing:0.5px">Budget Tier</div>
+            <div id="r-budget" class="badge-budget">—</div>
+          </div>
+        </div>
+        <div class="result-grid">
+          <div class="result-card"><div class="val" id="r-repeaters">—</div><div class="lbl">Repeaters Needed</div></div>
+          <div class="result-card"><div class="val" id="r-coverage">—</div><div class="lbl">Coverage Area (Ha)</div></div>
+          <div class="result-card"><div class="val" id="r-efficiency">—</div><div class="lbl">Coverage Efficiency %</div></div>
+          <div class="result-card"><div class="val" id="r-timeslots">—</div><div class="lbl">Total Timeslots</div></div>
+          <div class="result-card"><div class="val" id="r-gpio">—</div><div class="lbl">GPIO Points (Telemetry)</div></div>
+          <div class="result-card"><div class="val" id="r-margin">—</div><div class="lbl">Link Margin (dB)</div></div>
+        </div>
+        <div style="font-size:12px;color:var(--text-mid);background:rgba(255,255,255,0.5);padding:10px 14px;border-radius:8px">
+          <strong>Integration Path:</strong> <span id="r-integration">—</span>
+        </div>
+      </div>
+
+      <!-- Site Table -->
+      <div class="glass panel" style="margin-bottom:16px">
+        <div class="panel-title"><span class="panel-title-dot"></span> Recommended Repeater Sites</div>
+        <div style="overflow-x:auto">
+          <table class="site-table" id="site-table">
+            <thead>
+              <tr><th>Site Name</th><th>Model</th><th>Tower (m)</th><th>Power (W)</th><th>Radius (km)</th><th>Area (Ha)</th><th>Signal Margin (dB)</th></tr>
+            </thead>
+            <tbody id="site-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Warnings & Recommendations -->
+      <div class="glass panel">
+        <div class="panel-title"><span class="panel-title-dot"></span> Warnings &amp; Recommendations</div>
+        <ul class="warn-list" id="warn-list"></ul>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== PAGE: RF CALCULATOR ===== -->
+<div class="page" id="page-rf">
+  <div style="display:grid;grid-template-columns:360px 1fr;gap:20px;">
+
+    <div class="glass panel">
+      <div class="panel-title"><span class="panel-title-dot"></span> RF Link Budget Parameters</div>
+
+      <div class="form-group">
+        <label>TX Power (Watts)</label>
+        <input type="number" id="rf-power" value="50" min="1" max="100">
+      </div>
+      <div class="form-group">
+        <label>Antenna Gain (dBi)</label>
+        <input type="number" id="rf-gain" value="8" min="0" max="20" step="0.5">
+      </div>
+      <div class="form-group">
+        <label>Tower Height (m)</label>
+        <input type="number" id="rf-height" value="25" min="5" max="150">
+      </div>
+      <div class="form-group">
+        <label>Frequency (MHz)</label>
+        <input type="number" id="rf-freq" value="443" min="136" max="512">
+      </div>
+      <div class="form-group">
+        <label>Environment</label>
+        <select id="rf-env">
+          <option value="INDUSTRIAL_OUTDOOR">Industrial Outdoor</option>
+          <option value="INDUSTRIAL_INDOOR">Industrial Indoor</option>
+          <option value="OPEN_RURAL">Open Rural</option>
+          <option value="SUBURBAN">Suburban</option>
+          <option value="URBAN">Urban</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" onclick="runRfCalc()">Calculate Coverage</button>
+    </div>
+
+    <div id="rf-results" style="display:none">
+      <div class="glass panel" style="margin-bottom:16px">
+        <div class="panel-title"><span class="panel-title-dot"></span> Coverage Results</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+          <div class="result-card"><div class="val" id="rr-radius">—</div><div class="lbl">Coverage Radius (km)</div></div>
+          <div class="result-card"><div class="val" id="rr-area">—</div><div class="lbl">Coverage Area (Ha)</div></div>
+          <div class="result-card"><div class="val" id="rr-margin" style="color:var(--ok)">—</div><div class="lbl">Link Margin (dB)</div></div>
+        </div>
+        <div class="rf-result-grid">
+          <div class="rf-item"><div class="rf-lbl">TX Power</div><div class="rf-val" id="rr-txdbm">—</div></div>
+          <div class="rf-item"><div class="rf-lbl">EIRP</div><div class="rf-val" id="rr-eirp">—</div></div>
+          <div class="rf-item"><div class="rf-lbl">Path Loss</div><div class="rf-val" id="rr-pathloss">—</div></div>
+          <div class="rf-item"><div class="rf-lbl">Received Signal</div><div class="rf-val" id="rr-rsl">—</div></div>
+          <div class="rf-item"><div class="rf-lbl">Noise Floor (DMR)</div><div class="rf-val">-120 dBm</div></div>
+          <div class="rf-item" id="rr-adequate-card"><div class="rf-lbl">Link Adequate</div><div class="rf-val" id="rr-adequate">—</div></div>
+        </div>
+        <div style="margin-top:12px;font-size:11px;color:var(--text-mid);background:rgba(255,255,255,0.5);padding:10px;border-radius:8px;">
+          <strong>Model:</strong> Okumura-Hata | <strong>Receiver:</strong> MOTOTRBO XPR/DP (-116 dBm) | 
+          <strong>Margin incl.</strong> 15 dB indoor penetration + 3 dB body loss
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ===== PAGE: INTEGRATION ===== -->
+<div class="page" id="page-integration">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+
+    <div class="glass panel">
+      <div class="panel-title"><span class="panel-title-dot"></span> MOTOTRBO SCADA Integration Architecture</div>
+      <div style="font-size:13px;line-height:1.7;color:var(--text-mid)">
+        <p style="margin-bottom:12px">MOTOTRBO mendukung integrasi SCADA melalui beberapa mekanisme. Pemilihan jalur integrasi bergantung pada kompleksitas SCADA dan jenis data yang perlu dikirim.</p>
+
+        <div style="background:rgba(255,255,255,0.6);border-radius:10px;padding:14px;margin-bottom:10px;border-left:3px solid var(--primary)">
+          <strong style="color:var(--primary)">Opsi 1: MOTOTRBO Native Telemetry (GPIO)</strong>
+          <p style="margin-top:6px">Terbaik untuk: Simple digital I/O (alarm on/off, valve open/closed, motor running/stopped). Radio XPR7000e/DP4000e memiliki 4 GPIO pins (configurable IN/OUT). Data dikirim via DMR Timeslot 2 ke dispatcher.</p>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(26,86,219,0.05);padding:8px;border-radius:6px;margin-top:6px;">
+            Sensor → GPIO Pin (Radio) → DMR TS2 → Repeater → NAS → Dispatcher
+          </div>
+        </div>
+
+        <div style="background:rgba(255,255,255,0.6);border-radius:10px;padding:14px;margin-bottom:10px;border-left:3px solid var(--accent)">
+          <strong style="color:var(--accent)">Opsi 2: MOTOTRBO Data Gateway (Modbus Bridge)</strong>
+          <p style="margin-top:6px">Terbaik untuk: Integrasi dengan PLC/SCADA existing yang menggunakan Modbus RTU/TCP. Data Gateway mengkonversi Modbus poll ke DMR data packets dan dikirim ke radio di lapangan.</p>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(249,115,22,0.05);padding:8px;border-radius:6px;margin-top:6px;">
+            SCADA Server → Modbus TCP → Data Gateway → DMR Network → Field Radio
+          </div>
+        </div>
+
+        <div style="background:rgba(255,255,255,0.6);border-radius:10px;padding:14px;margin-bottom:10px;border-left:3px solid var(--ok)">
+          <strong style="color:var(--ok)">Opsi 3: MOTOTRBO Application Server API</strong>
+          <p style="margin-top:6px">Terbaik untuk: Custom SCADA software atau modern integration. REST API atau XML interface memungkinkan SCADA system untuk mengirim/menerima data dari radio network.</p>
+          <div style="font-family:'JetBrains Mono',monospace;font-size:11px;background:rgba(22,163,74,0.05);padding:8px;border-radius:6px;margin-top:6px;">
+            Custom SCADA → REST API → Application Server → DMR Network → Radio
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div>
+      <div class="glass panel" style="margin-bottom:16px">
+        <div class="panel-title"><span class="panel-title-dot"></span> MOTOTRBO Product Reference</div>
+        <table class="site-table">
+          <thead><tr><th>Model</th><th>Series</th><th>Telemetry</th><th>GPS</th><th>Power</th></tr></thead>
+          <tbody>
+            <tr><td><strong>XPR7550e</strong></td><td>XPR 7000e</td><td>GPIO x4</td><td>Yes</td><td>4W</td></tr>
+            <tr><td><strong>XPR7350e</strong></td><td>XPR 7000e</td><td>GPIO x4</td><td>No</td><td>4W</td></tr>
+            <tr><td><strong>DP4801e</strong></td><td>DP 4000e</td><td>GPIO x4</td><td>Yes</td><td>5W</td></tr>
+            <tr><td><strong>DP4601e</strong></td><td>DP 4000e</td><td>GPIO x4</td><td>No</td><td>5W</td></tr>
+            <tr><td><strong>R7</strong></td><td>R7 Series</td><td>GPIO x4</td><td>Yes</td><td>5W</td></tr>
+            <tr><td><strong>SL3500e</strong></td><td>SL Series</td><td>No GPIO</td><td>No</td><td>3W</td></tr>
+            <tr><td><strong>SLR8000</strong></td><td>Repeater</td><td>—</td><td>—</td><td>100W</td></tr>
+            <tr><td><strong>SLR5000</strong></td><td>Repeater</td><td>—</td><td>—</td><td>50W</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="glass panel">
+        <div class="panel-title"><span class="panel-title-dot"></span> DMR Timeslot Allocation Guide</div>
+        <div style="font-size:12px;line-height:1.7;color:var(--text-mid)">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px;">
+            <div style="background:rgba(59,130,246,0.1);padding:10px;border-radius:8px;">
+              <strong style="color:var(--primary);font-size:11px">TIMESLOT 1</strong>
+              <div>Voice calls</div>
+              <div>Emergency calls (priority)</div>
+              <div>Group calls</div>
+            </div>
+            <div style="background:rgba(249,115,22,0.1);padding:10px;border-radius:8px;">
+              <strong style="color:var(--accent);font-size:11px">TIMESLOT 2</strong>
+              <div>SCADA telemetry data</div>
+              <div>GPS location updates</div>
+              <div>Text messaging</div>
+              <div>Remote monitoring</div>
+            </div>
+          </div>
+          <p style="font-size:11px">Best practice: Dedikasikan TS2 khusus untuk SCADA data agar tidak ada contention dengan voice traffic. Dengan DMR TDMA, satu kanal RF = 2 logical channels (2 timeslots) pada 12.5 kHz bandwidth.</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+</main>
+
+<div class="footer">
+  MOTOTRBO SCADA Integration Simulator &mdash; Motorola Solutions Presales Tool &mdash; For demonstration and sizing purposes only
+</div>
+
+<script>
+// ===== STATE =====
+let ws = null;
+let lastState = null;
+
+// ===== NAVIGATION =====
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ===== WEBSOCKET =====
+function connectWs() {
+  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  ws = new WebSocket(`${proto}://${location.host}/ws/telemetry`);
+
+  ws.onopen = () => {
+    document.getElementById('wsStatus').style.background = 'var(--ok)';
+    document.getElementById('wsLabel').textContent = 'Live';
+  };
+  ws.onclose = () => {
+    document.getElementById('wsStatus').style.background = 'var(--alarm)';
+    document.getElementById('wsLabel').textContent = 'Disconnected';
+    setTimeout(connectWs, 3000);
+  };
+  ws.onerror = () => {
+    document.getElementById('wsLabel').textContent = 'Error';
+  };
+  ws.onmessage = (e) => {
+    try {
+      lastState = JSON.parse(e.data);
+      renderDashboard(lastState);
+    } catch(err) {}
+  };
+}
+
+// ===== RENDER =====
+function renderDashboard(state) {
+  const stats = state.systemStats || {};
+  const radios = state.radios || [];
+  const nodes = state.scadaNodes || [];
+  const repeaters = state.repeaters || [];
+  const events = state.recentEvents || [];
+
+  // KPIs
+  set('kpi-radios', stats.onlineRadios + '/' + stats.totalRadios);
+  set('kpi-repeaters', stats.activeRepeaters + '/' + stats.totalRepeaters);
+  const warnNodes = nodes.filter(n => n.status === 'WARNING').length;
+  set('kpi-nodes-ok', nodes.filter(n => n.status === 'NORMAL').length);
+  set('kpi-nodes-warn', warnNodes);
+  set('kpi-nodes-alarm', stats.alarmNodes || 0);
+  set('kpi-events', stats.eventCount || 0);
+
+  // Radios
+  const radioHtml = radios.slice(0, 12).map(r => `
+    <div class="radio-item">
+      <div class="radio-avatar">📡</div>
+      <div class="radio-info">
+        <div class="radio-alias">${r.radioAlias || r.radioId}</div>
+        <div class="radio-model">${r.model} &bull; ${r.location || ''}</div>
+      </div>
+      <div>
+        <div class="radio-signal">${r.signalStrength ? r.signalStrength.toFixed(0) + ' dBm' : '—'}</div>
+        <div class="radio-signal">${r.batteryLevel ? r.batteryLevel.toFixed(0) + '% bat' : ''}</div>
+      </div>
+      <span class="radio-status-badge badge-${(r.status||'IDLE').toLowerCase()}">${r.status||'IDLE'}</span>
+    </div>
+  `).join('');
+  set('radio-list', radioHtml || 'No radios');
+
+  // SCADA Nodes
+  const scadaHtml = nodes.slice(0, 12).map(n => {
+    const val = getNodeValue(n);
+    const cls = n.status === 'ALARM' ? 'alarm' : n.status === 'WARNING' ? 'warning' : '';
+    return `
+      <div class="scada-node ${cls}">
+        <div class="scada-node-id">${n.nodeId}</div>
+        <div class="scada-node-name">${n.nodeName}</div>
+        <div class="scada-node-value ${cls}">${val}</div>
+        <div style="font-size:10px;color:var(--text-mid)">${n.plantArea}</div>
+      </div>
+    `;
+  }).join('');
+  set('scada-grid', scadaHtml || 'No nodes');
+
+  // Repeaters
+  const repHtml = repeaters.map(r => `
+    <div class="repeater-card">
+      <div><span class="active-led"></span><span class="repeater-model">${r.model}</span></div>
+      <div class="repeater-site">${r.siteName}</div>
+      <div class="repeater-stat-row">
+        <div class="repeater-stat"><label>VSWR</label><value>${r.vswr ? r.vswr.toFixed(2) : '—'}</value></div>
+        <div class="repeater-stat"><label>Temp</label><value>${r.temperature ? r.temperature.toFixed(0) + '°C' : '—'}</value></div>
+        <div class="repeater-stat"><label>Power</label><value>${r.txPowerWatts ? r.txPowerWatts.toFixed(0) + 'W' : '—'}</value></div>
+        <div class="repeater-stat"><label>CH</label><value>${r.activeChannels !== null ? r.activeChannels + '/2' : '—'}</value></div>
+      </div>
+    </div>
+  `).join('');
+  set('repeater-list', repHtml || 'No repeaters');
+
+  // Events
+  const evHtml = [...events].reverse().slice(0,30).map(e => {
+    const t = e.timestamp ? e.timestamp.split('T')[1].split('.')[0] : '—';
+    return `
+      <div class="event-item">
+        <span class="event-time">${t}</span>
+        <span class="event-desc">${e.description || e.eventCode}</span>
+        <span class="event-sev sev-${e.severity || 'INFO'}">${e.severity || 'INFO'}</span>
+      </div>
+    `;
+  }).join('');
+  set('event-log', evHtml || 'No events yet...');
+}
+
+function getNodeValue(n) {
+  switch (n.nodeType) {
+    case 'TEMPERATURE_SENSOR': return n.temperature ? n.temperature.toFixed(1) + ' °C' : '—';
+    case 'PRESSURE_SENSOR': return n.pressure ? n.pressure.toFixed(2) + ' Bar' : '—';
+    case 'TANK_LEVEL': return n.tankLevel ? n.tankLevel.toFixed(1) + ' %' : '—';
+    case 'FLOW_METER': return n.flowRate ? n.flowRate.toFixed(0) + ' L/m' : '—';
+    case 'MOTOR_CONTROLLER': return n.motorRpm ? n.motorRpm.toFixed(0) + ' RPM' : '—';
+    case 'VALVE_ACTUATOR': return n.valveOpen ? 'OPEN' : 'CLOSED';
+    case 'ALARM_PANEL': return n.alarmActive ? 'ALARM' : 'CLEAR';
+    default: return n.status || '—';
+  }
+}
+
+function set(id, html) {
+  const el = document.getElementById(id);
+  if (el) el.innerHTML = html;
+}
+
+// ===== SIZING ENGINE =====
+async function runSizing() {
+  const req = {
+    totalAreaHa: parseFloat(document.getElementById('s-area').value),
+    numSites: parseInt(document.getElementById('s-sites').value),
+    numUsers: parseInt(document.getElementById('s-users').value),
+    numRadios: parseInt(document.getElementById('s-radios').value),
+    numScadaNodes: parseInt(document.getElementById('s-scada').value),
+    antennaTowerHeightM: parseFloat(document.getElementById('s-tower').value),
+    isIndoor: document.getElementById('s-env').value === 'true',
+    radioModel: document.getElementById('s-radio-model').value,
+    repeaterModel: document.getElementById('s-repeater-model').value
+  };
+
+  try {
+    const res = await fetch('/api/v1/sizing/calculate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(req)
+    });
+    const data = await res.json();
+    renderSizingResults(data);
+  } catch(e) {
+    alert('Error: Could not connect to backend. Please start the Spring Boot application.');
+  }
+}
+
+function renderSizingResults(d) {
+  document.getElementById('sizing-results').style.display = 'block';
+
+  const typeMap = {
+    MOTOTRBO_CONVENTIONAL: 'MOTOTRBO Conventional',
+    CAPACITY_PLUS: 'Capacity Plus (Trunking)',
+    IP_SITE_CONNECT: 'IP Site Connect (Multi-site)',
+    LINKED_CAPACITY_PLUS: 'Linked Capacity Plus',
+    CAPACITY_MAX: 'Capacity Max (Enterprise)'
+  };
+
+  set('r-systemtype', typeMap[d.systemType] || d.systemType);
+  const budgetEl = document.getElementById('r-budget');
+  budgetEl.textContent = d.estimatedBudgetTier;
+  budgetEl.className = 'badge-budget budget-' + d.estimatedBudgetTier;
+
+  set('r-repeaters', d.recommendedRepeaters);
+  set('r-coverage', Math.round(d.totalCoverageAreaHa).toLocaleString());
+  set('r-efficiency', d.coverageEfficiencyPercent ? d.coverageEfficiencyPercent.toFixed(0) + '%' : '—');
+  set('r-timeslots', d.timeslotsAvailable);
+  set('r-gpio', d.gpioPointsAvailable);
+  set('r-margin', d.linkMarginDb ? d.linkMarginDb.toFixed(1) + ' dB' : '—');
+  set('r-integration', d.recommendedIntegrationPath || '—');
+
+  // Site table
+  const tbody = document.getElementById('site-tbody');
+  if (d.siteRecommendations) {
+    tbody.innerHTML = d.siteRecommendations.map(s => `
+      <tr>
+        <td><strong>${s.siteName}</strong></td>
+        <td>${s.repeaterModel}</td>
+        <td>${s.antennaTowerHeightM}m</td>
+        <td>${s.txPowerWatts ? s.txPowerWatts.toFixed(0) : '—'}W</td>
+        <td>${s.coverageRadiusKm ? s.coverageRadiusKm.toFixed(2) : '—'}</td>
+        <td>${s.coverageAreaHa ? Math.round(s.coverageAreaHa) : '—'}</td>
+        <td><span style="color:${s.signalMarginDb > 10 ? 'var(--ok)' : 'var(--warn)'}">${s.signalMarginDb ? s.signalMarginDb.toFixed(1) : '—'} dB</span></td>
+      </tr>
+    `).join('');
+  }
+
+  // Warnings
+  const wl = document.getElementById('warn-list');
+  wl.innerHTML = '';
+  (d.warnings || []).forEach(w => {
+    const li = document.createElement('li');
+    li.className = 'warn';
+    li.textContent = '⚠ ' + w;
+    wl.appendChild(li);
+  });
+  (d.recommendations || []).forEach(r => {
+    const li = document.createElement('li');
+    li.className = 'rec';
+    li.textContent = '✓ ' + r;
+    wl.appendChild(li);
+  });
+}
+
+// ===== RF CALCULATOR =====
+async function runRfCalc() {
+  const params = new URLSearchParams({
+    txPowerW: document.getElementById('rf-power').value,
+    antennaGainDbi: document.getElementById('rf-gain').value,
+    towerHeightM: document.getElementById('rf-height').value,
+    frequencyMhz: document.getElementById('rf-freq').value,
+    environment: document.getElementById('rf-env').value
+  });
+
+  try {
+    const res = await fetch('/api/v1/rf/coverage?' + params);
+    const d = await res.json();
+    document.getElementById('rf-results').style.display = 'block';
+
+    set('rr-radius', d.coverageRadiusKm + ' km');
+    set('rr-area', Number(d.coverageAreaHa).toLocaleString() + ' Ha');
+    set('rr-margin', d.linkMarginDb + ' dB');
+    set('rr-txdbm', d.txPowerDbm + ' dBm');
+    set('rr-eirp', d.eirpDbm + ' dBm');
+    set('rr-pathloss', d.pathLossDb + ' dB');
+    set('rr-rsl', d.receivedSignalDbm + ' dBm');
+    set('rr-adequate', d.isLinkAdequate ? 'YES' : 'NO');
+
+    document.getElementById('rr-adequate-card').className = 'rf-item ' + (d.isLinkAdequate ? 'good' : 'bad');
+    document.getElementById('rr-margin').style.color = parseFloat(d.linkMarginDb) > 8 ? 'var(--ok)' : 'var(--alarm)';
+  } catch(e) {
+    alert('Error: Could not connect to backend.');
+  }
+}
+
+// ===== INIT =====
+window.onload = function() {
+  connectWs();
+};
+</script>
+</body>
+</html>

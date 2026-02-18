@@ -1,0 +1,13 @@
+target/
+*.class
+*.jar
+*.war
+.idea/
+*.iml
+.eclipse/
+.classpath
+.project
+.settings/
+*.log
+generate_diagrams.py
+__pycache__/
